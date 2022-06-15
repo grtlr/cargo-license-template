@@ -1,0 +1,17 @@
+[package]
+name = "cargo-license-template"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jochen Görtler <me@jgoertler.com>"]
+license = "Apache-2.0/MIT"
+description = "A cargo subcommand to check each Rust file against a license template."
+readme = "README.md"
+repository = "https://github.com/grtlr/cargo-license-template"
+categories = ["development-tools"]
+
+[dependencies]
+clap = { version = "3.2.4", default-features = false, features = [ "derive", "std" ] }
+cargo_metadata = { version = "0.14.2", default-features = false }
+regex = { version = "1.5.6", default-features = false, features = [ "std", "unicode-perl" ] }
+thiserror = { version = "1.0", default-features = false }
+walkdir = { version = "2.3.2", default-features = false }
