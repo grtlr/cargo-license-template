@@ -17,6 +17,9 @@ pub struct CliArgs {
     /// The location of the license template.
     #[clap(value_parser, long)]
     pub template: String,
+    /// Path to Cargo.toml.
+    #[clap(value_parser, long)]
+    manifest_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Error)]
@@ -43,7 +46,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let license_template = license::load_and_compile_template(&cli_args.template)?;
 
-    let metadata = cargo_metadata::MetadataCommand::new().exec()?;
+    let mut cmd = cargo_metadata::MetadataCommand::new();
+
+    if let Some(path) = &cli_args.manifest_path {
+        cmd.manifest_path(path);
+    }
+
+    let metadata = cmd.exec()?;
 
     for entry in WalkDir::new(metadata.workspace_root)
         .into_iter()
