@@ -1,11 +1,13 @@
+mod error;
+mod license;
+
 use clap::Parser;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
-mod license;
+pub(crate) use self::error::Error;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -20,12 +22,6 @@ pub struct CliArgs {
     /// Path to Cargo.toml.
     #[clap(value_parser, long)]
     manifest_path: Option<PathBuf>,
-}
-
-#[derive(Debug, Error)]
-enum Error {
-    #[error("Invalid license in file `{0}`")]
-    InvalidLicense(PathBuf),
 }
 
 fn is_rust_code(entry: &DirEntry) -> bool {

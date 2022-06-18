@@ -1,42 +1,12 @@
 // Shamelessly taken from `rustfmt` after it was removed from their repository by the following commit:
 // https://github.com/rust-lang/rustfmt/commit/79515f17ed4661da864347c90c76c51f9bf86069
 
-use std::fmt;
 use std::fs::File;
-use std::io;
 use std::io::Read;
 
 use regex::Regex;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub(crate) enum LicenseError {
-    IO(io::Error),
-    Regex(regex::Error),
-    Parse(String),
-}
-
-impl fmt::Display for LicenseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            LicenseError::IO(ref err) => err.fmt(f),
-            LicenseError::Regex(ref err) => err.fmt(f),
-            LicenseError::Parse(ref err) => write!(f, "parsing failed, {}", err),
-        }
-    }
-}
-
-impl From<io::Error> for LicenseError {
-    fn from(err: io::Error) -> LicenseError {
-        LicenseError::IO(err)
-    }
-}
-
-impl From<regex::Error> for LicenseError {
-    fn from(err: regex::Error) -> LicenseError {
-        LicenseError::Regex(err)
-    }
-}
+use crate::Error;
 
 // the template is parsed using a state machine
 enum ParsingState {
@@ -113,7 +83,7 @@ impl TemplateParser {
     /// "
     /// );
     /// ```
-    pub(crate) fn parse(template: &str) -> Result<String, LicenseError> {
+    pub(crate) fn parse(template: &str) -> Result<String, Error> {
         let mut parser = Self::new();
         for chr in template.chars() {
             if chr == '\n' {
@@ -124,20 +94,20 @@ impl TemplateParser {
                 LitEsc => parser.trans_from_litesc(chr),
                 Re(brace_nesting) => parser.trans_from_re(chr, brace_nesting),
                 ReEsc(brace_nesting) => parser.trans_from_reesc(chr, brace_nesting),
-                Abort(msg) => return Err(LicenseError::Parse(msg)),
+                Abort(msg) => return Err(Error::Parse(msg)),
             };
         }
         // check if we've ended parsing in a valid state
         match parser.state {
-            Abort(msg) => return Err(LicenseError::Parse(msg)),
+            Abort(msg) => return Err(Error::Parse(msg)),
             Re(_) | ReEsc(_) => {
-                return Err(LicenseError::Parse(format!(
+                return Err(Error::Parse(format!(
                     "escape or balance opening brace on l. {}",
                     parser.open_brace_line
                 )));
             }
             LitEsc => {
-                return Err(LicenseError::Parse(format!(
+                return Err(Error::Parse(format!(
                     "incomplete escape sequence on l. {}",
                     parser.linum
                 )));
@@ -215,7 +185,7 @@ impl TemplateParser {
     }
 }
 
-pub(crate) fn load_and_compile_template(path: &str) -> Result<Regex, LicenseError> {
+pub(crate) fn load_and_compile_template(path: &str) -> Result<Regex, Error> {
     let mut lt_file = File::open(&path)?;
     let mut lt_str = String::new();
     lt_file.read_to_string(&mut lt_str)?;
