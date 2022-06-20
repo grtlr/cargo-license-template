@@ -1,11 +1,13 @@
 mod error;
 mod license;
 
+use anyhow::Context;
+use anyhow::Result;
 use clap::Parser;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
-use walkdir::{DirEntry, WalkDir};
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 pub(crate) use self::error::Error;
 
@@ -22,10 +24,14 @@ pub struct CliArgs {
     /// Path to Cargo.toml.
     #[clap(value_parser, long)]
     manifest_path: Option<PathBuf>,
+    /// Use verbose output
+    #[clap(value_parser, short, long)]
+    verbose: bool,
 }
 
-fn is_rust_code(entry: &DirEntry) -> bool {
-    entry.path().extension().and_then(|ext| ext.to_str()) == Some("rs")
+fn is_rust_code(entry: impl AsRef<Path>) -> bool {
+    entry.as_ref().is_file()
+        && entry.as_ref().extension().and_then(|ext| ext.to_str()) == Some("rs")
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into_iter()
         .filter_map(|e| {
             e.ok().and_then(|e| {
-                if !e.path().starts_with(&metadata.target_directory) {
+                if !e.path().starts_with(&metadata.target_directory) && is_rust_code(e.path()) {
                     Some(e)
                 } else {
                     None
@@ -62,11 +68,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
         })
     {
-        if is_rust_code(&entry) {
-            let file_contents = fs::read_to_string(entry.path())?;
-            if !license_template.is_match(&file_contents) {
-                return Err(Box::new(Error::InvalidLicense(entry.path().to_owned())));
-            }
+        let path = entry.path();
+        if cli_args.verbose {
+            print!("Checking file `{}`", path.display());
+        }
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read file `{}`", path.display()))?;
+        if !license_template.is_match(&content) {
+            return Err(Box::new(Error::InvalidLicense(entry.path().to_owned())));
+        }
+        if cli_args.verbose {
+            println!(" ... ok");
         }
     }
 
