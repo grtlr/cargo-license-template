@@ -2,14 +2,31 @@ mod error;
 mod license;
 
 use anyhow::Context;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
+use colored::Colorize;
+use regex::Regex;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub(crate) use self::error::Error;
+
+enum Report {
+    Conform(PathBuf),
+    Conflict(PathBuf),
+}
+
+fn check_file<P: AsRef<Path>>(path: P, template: &Regex) -> Result<Report> {
+    let content = fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read file `{}`", path.as_ref().display()))?;
+
+    Ok(match template.is_match(&content) {
+        true => Report::Conform(path.as_ref().to_path_buf()),
+        false => Report::Conflict(path.as_ref().to_path_buf()),
+    })
+}
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -19,14 +36,17 @@ pub(crate) use self::error::Error;
 )]
 pub struct CliArgs {
     /// The location of the license template.
-    #[clap(value_parser, long)]
+    #[clap(long, value_parser)]
     pub template: String,
     /// Path to Cargo.toml.
-    #[clap(value_parser, long)]
+    #[clap(long, value_parser)]
     manifest_path: Option<PathBuf>,
     /// Use verbose output
-    #[clap(value_parser, short, long)]
+    #[clap(short, long, value_parser)]
     verbose: bool,
+    /// Use colored output (if supported)
+    #[clap(short, long, default_value_t = true, value_parser)]
+    color: bool,
 }
 
 fn is_rust_code(entry: impl AsRef<Path>) -> bool {
@@ -34,7 +54,7 @@ fn is_rust_code(entry: impl AsRef<Path>) -> bool {
         && entry.as_ref().extension().and_then(|ext| ext.to_str()) == Some("rs")
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     // When called by `cargo`, we need to drop the extra `license-template` argument.
     let args = env::args().enumerate().filter_map(|(i, x)| {
         if (i, x.as_str()) == (1, "license-template") {
@@ -56,31 +76,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let metadata = cmd.exec()?;
 
-    for entry in WalkDir::new(metadata.workspace_root)
+    let reports = WalkDir::new(&metadata.workspace_root)
         .into_iter()
         .filter_map(|e| {
             e.ok().and_then(|e| {
                 if !e.path().starts_with(&metadata.target_directory) && is_rust_code(e.path()) {
-                    Some(e)
+                    Some(check_file(e.path(), &license_template))
                 } else {
                     None
                 }
             })
-        })
-    {
-        let path = entry.path();
-        if cli_args.verbose {
-            print!("Checking file `{}`", path.display());
-        }
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read file `{}`", path.display()))?;
-        if !license_template.is_match(&content) {
-            return Err(Box::new(Error::InvalidLicense(entry.path().to_owned())));
-        }
-        if cli_args.verbose {
-            println!(" ... ok");
+        });
+
+    let mut no_errors = true;
+    for report in reports {
+        match report? {
+            Report::Conform(path) => {
+                if cli_args.verbose {
+                    println!(
+                        "{} ... {}",
+                        path.strip_prefix(&metadata.workspace_root)?.display(),
+                        "ok".green()
+                    );
+                }
+            }
+            Report::Conflict(path) => {
+                println!(
+                    "{} ... {}",
+                    path.strip_prefix(&metadata.workspace_root)?.display(),
+                    "failed".red()
+                );
+                no_errors = false;
+            }
         }
     }
 
-    Ok(())
+    match no_errors {
+        true => Ok(()),
+        false => Err(anyhow!("At least one non-conformed file has been found.")),
+    }
 }
