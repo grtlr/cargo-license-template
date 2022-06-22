@@ -12,7 +12,7 @@ categories = ["development-tools"]
 [dependencies]
 clap = { version = "3.2", default-features = false, features = [ "derive", "std" ] }
 colored = { version = "2.0", default-features = false }
-cargo_metadata = { version = "0.14", default-features = false }
+cargo_metadata = { version = "0.15", default-features = false }
 regex = { version = "1.5", default-features = false, features = [ "std", "unicode-perl" ] }
 anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
 thiserror = { version = "1.0", default-features = false }
