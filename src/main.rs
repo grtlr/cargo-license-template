@@ -122,6 +122,6 @@ fn main() -> Result<()> {
 
     match no_errors {
         true => Ok(()),
-        false => Err(anyhow!("At least one non-conformed file has been found.")),
+        false => Err(anyhow!("At least one non-conformant file has been found.")),
     }
 }
