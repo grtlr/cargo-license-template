@@ -5,11 +5,11 @@ use anyhow::Context;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use colored::Colorize;
+use ignore::WalkBuilder;
 use regex::Regex;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 pub(crate) use self::error::Error;
 
@@ -47,6 +47,9 @@ pub struct CliArgs {
     /// Use colored output (if supported)
     #[clap(short, long, default_value_t = true, value_parser)]
     color: bool,
+    /// The location of a file that contains ignored files and directories.
+    #[clap(short, long, value_parser)]
+    ignore: Option<String>,
 }
 
 fn is_rust_code(entry: impl AsRef<Path>) -> bool {
@@ -76,17 +79,23 @@ fn main() -> Result<()> {
 
     let metadata = cmd.exec()?;
 
-    let reports = WalkDir::new(&metadata.workspace_root)
-        .into_iter()
-        .filter_map(|e| {
-            e.ok().and_then(|e| {
-                if !e.path().starts_with(&metadata.target_directory) && is_rust_code(e.path()) {
-                    Some(check_file(e.path(), &license_template))
-                } else {
-                    None
-                }
-            })
-        });
+    let walker = if let Some(file_name) = cli_args.ignore {
+        WalkBuilder::new(&metadata.workspace_root)
+            .add_custom_ignore_filename(file_name)
+            .to_owned()
+    } else {
+        WalkBuilder::new(&metadata.workspace_root)
+    };
+
+    let reports = walker.build().into_iter().filter_map(|e| {
+        e.ok().and_then(|e| {
+            if !e.path().starts_with(&metadata.target_directory) && is_rust_code(e.path()) {
+                Some(check_file(e.path(), &license_template))
+            } else {
+                None
+            }
+        })
+    });
 
     let mut no_errors = true;
     for report in reports {
